@@ -5631,15 +5631,22 @@ void fg::Exporter::writeLights(const Asset& asset, std::string& json) {
 		}
 
 		if (it->type == LightType::Spot) {
-			if (it->innerConeAngle.has_value())
-				json += R"("innerConeAngle":)" + to_string_fp(it->innerConeAngle.value()) + ',';
-
-			if (it->outerConeAngle.has_value())
-				json += R"("outerConeAngle":)" + to_string_fp(it->outerConeAngle.value()) + ',';
+			json += R"(,"spot":{)";
+			bool needComma = false;
+			if (it->innerConeAngle.has_value()) {
+				json += R"("innerConeAngle":)" + to_string_fp(it->innerConeAngle.value());
+				needComma = true;
+			}
+			if (it->outerConeAngle.has_value()) {
+				if (needComma) json += ',';
+				json += R"("outerConeAngle":)" + to_string_fp(it->outerConeAngle.value());
+			}
+			json += '}';
 		}
 
 		if (!it->name.empty())
 			json += R"(,"name":")" + fg::escapeString(it->name) + '"';
+		if (json.back() == ',') json.pop_back();
 		json += '}';
 		if (uabs(std::distance(asset.lights.begin(), it)) + 1 <asset.lights.size())
 			json += ',';
@@ -6285,85 +6292,29 @@ void fg::Exporter::writeNodes(const Asset& asset, std::string& json) {
 #if FASTGLTF_ENABLE_KHR_PHYSICS_RIGID_BODIES
 			if (it->physicsRigidBody) {
 				if (json.back() != '{') json += ',';
-				json += R"("KHR_physics_rigid_body":{)";
-				if (it->physicsRigidBody->motion.has_value()) {
-					const auto& motion = *it->physicsRigidBody->motion;
-					json += R"("motion":{"isKinematic":)" + std::to_string(motion.isKinematic);
-					if (motion.mass.has_value()) {
-						json += R"(,"mass":)" + to_string_fp(*motion.mass);
-					}
-					json += R"(,"centerOfMass":[)" + to_string(motion.centerOfMass) + ']';
-					if (motion.inertialDiagonal.has_value()) {
-						json += R"(,"inertialDiagonal":[)" + to_string(*motion.inertialDiagonal) + ']';
-					}
-					if (motion.inertialOrientation.has_value()) {
-						json += R"(,"inertialOrientation":[)" + to_string(*motion.inertialOrientation) + ']';
-					}
-					json += R"(,"linearVelocity":)" + to_string(motion.linearVelocity)
-				        + R"(],"angularVelocity":[)" + to_string(motion.angularVelocity)
-				        + R"(],"gravityFactor":[)" + to_string_fp(motion.gravityFactor) + '}';
-				}
-
-				if (it->physicsRigidBody->trigger.has_value()) {
-					if (json.back() != '{') json += ',';
-					const auto& trigger = *it->physicsRigidBody->trigger;
-					json += R"("trigger":{)";
-					visit_exhaustive(visitor{
-						[&](const GeometryTrigger& geometry) {
-							json += R"("geometry":{)";
-							if (geometry.geometry.shape.has_value()) {
-								json += R"("shape":)" + std::to_string(*geometry.geometry.shape) + ',';
-							} else if(geometry.geometry.mesh.has_value()) {
-								json += R"("mesh":)" + std::to_string(*geometry.geometry.mesh) + ',';
-							}
-							json += R"("convexHull":)" + std::to_string(geometry.geometry.convexHull) + '}';
-
-							if (geometry.collisionFilter.has_value()) {
-								json += R"(,"collisionFilter":)" + std::to_string(*geometry.collisionFilter);
-							}
-						},
-						[&](const NodeTrigger& node) {
-							json += R"("nodes":[)";
-							for (auto it = node.nodes.begin(); it != node.nodes.end(); ++it) {
-								json += std::to_string(*it);
-								if (uabs(std::distance(node.nodes.begin(), it)) + 1 < node.nodes.size())
-									json += ',';
-							}
-							json += ']';
-						},
-						}, trigger);
-					json += '}';
-				}
-
-				if (it->physicsRigidBody->joint.has_value()) {
-					if (json.back() != '{') json += ',';
-					const auto& joint = *it->physicsRigidBody->joint;
-					json += R"("joint":{"connectedNode":)" + std::to_string(joint.connectedNode)
-				        + R"(,"joint":)" + std::to_string(joint.joint)
-				        + R"(,"enableCollision":)" + std::to_string(joint.enableCollision) + '}';
-				}
-
+				json += R"("KHR_physics_rigid_bodies":{)";
 				if (it->physicsRigidBody->collider.has_value()) {
-					if (json.back() != '{') json += ',';
 					const auto& collider = *it->physicsRigidBody->collider;
-					json += R"("collider":{)";
-
-					json += R"("geometry":{)";
+					json += R"("collider":{"geometry":{)";
 					if (collider.geometry.shape.has_value()) {
-						json += R"("shape":)" + std::to_string(*collider.geometry.shape) + ',';
+						json += R"("shape":)" + std::to_string(*collider.geometry.shape);
 					} else if (collider.geometry.mesh.has_value()) {
-						json += R"("mesh":)" + std::to_string(*collider.geometry.mesh) + ',';
+						json += R"("mesh":)" + std::to_string(*collider.geometry.mesh);
 					}
-					json += R"("convexHull":)" + std::to_string(collider.geometry.convexHull) + '}';
-
+					if (collider.geometry.convexHull) {
+						if (json.back() != '{') json += ',';
+						json += R"("convexHull":true)";
+					}
+					json += '}';
 					if (collider.physicsMaterial.has_value()) {
 						json += R"(,"physicsMaterial":)" + std::to_string(*collider.physicsMaterial);
 					}
-					if (collider.collisionFilter) {
+					if (collider.collisionFilter.has_value()) {
 						json += R"(,"collisionFilter":)" + std::to_string(*collider.collisionFilter);
 					}
 					json += '}';
 				}
+				json += '}';
 			}
 #endif
 
@@ -6786,6 +6737,7 @@ void fg::Exporter::writeCollisionFilters(const Asset& asset, std::string& json) 
 			}
 		}
 
+		if (json.back() == ',') json.pop_back();
 		json += '}';
 
 		if (uabs(std::distance(asset.collisionFilters.begin(), it)) + 1 < asset.collisionFilters.size()) {
