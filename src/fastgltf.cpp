@@ -1176,9 +1176,11 @@ fg::Error fg::validate(const Asset& asset) {
 			return Error::InvalidGltf;
 		if (material.volume && !isExtensionUsed(extensions::KHR_materials_volume))
 			return Error::InvalidGltf;
-		if (material.emissiveStrength != 1.0f && !isExtensionUsed(extensions::KHR_materials_emissive_strength))
+		if (material.emissiveStrength.has_value() && !isExtensionUsed(extensions::KHR_materials_emissive_strength))
 			return Error::InvalidGltf;
-		if (material.ior != 1.5f && !isExtensionUsed(extensions::KHR_materials_ior))
+		if (material.ior.has_value() && !isExtensionUsed(extensions::KHR_materials_ior))
+			return Error::InvalidGltf;
+		if (material.dispersion.has_value() && !isExtensionUsed(extensions::KHR_materials_dispersion))
 			return Error::InvalidGltf;
 		if (material.packedNormalMetallicRoughnessTexture && !isExtensionUsed(extensions::MSFT_packing_normalRoughnessMetallic))
 			return Error::InvalidGltf;
@@ -2849,13 +2851,11 @@ fg::Error fg::Parser::parseMaterialExtensions(simdjson::dom::object &object, Mat
 					return Error::InvalidGltf;
 				}
 
-				double dispersionFactor;
-				auto error = dispersionObject["dispersion"].get_double().get(dispersionFactor);
-				if (error == SUCCESS) FASTGLTF_LIKELY {
-					material.dispersion = static_cast<num>(dispersionFactor);
-				} else if (error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+				double dispersionFactor = 0.0; // spec default
+				if (auto error = dispersionObject["dispersion"].get_double().get(dispersionFactor); error != SUCCESS && error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
 					return Error::InvalidGltf;
 				}
+				material.dispersion = static_cast<num>(dispersionFactor);
 				break;
 			}
 			case force_consteval<crc32c(extensions::KHR_materials_emissive_strength)>: {
@@ -2868,13 +2868,11 @@ fg::Error fg::Parser::parseMaterialExtensions(simdjson::dom::object &object, Mat
 					return Error::InvalidGltf;
 				}
 
-				double emissiveStrength;
-				auto error = emissiveObject["emissiveStrength"].get_double().get(emissiveStrength);
-				if (error == SUCCESS) FASTGLTF_LIKELY {
-					material.emissiveStrength = static_cast<num>(emissiveStrength);
-				} else if (error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+				double emissiveStrength = 1.0; // spec default
+				if (auto error = emissiveObject["emissiveStrength"].get_double().get(emissiveStrength); error != SUCCESS && error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
 					return Error::InvalidGltf;
 				}
+				material.emissiveStrength = static_cast<num>(emissiveStrength);
 				break;
 			}
 			case force_consteval<crc32c(extensions::KHR_materials_ior)>: {
@@ -2887,13 +2885,11 @@ fg::Error fg::Parser::parseMaterialExtensions(simdjson::dom::object &object, Mat
 					return Error::InvalidGltf;
 				}
 
-				double ior;
-				auto error = iorObject["ior"].get_double().get(ior);
-				if (error == SUCCESS) FASTGLTF_LIKELY {
-					material.ior = static_cast<num>(ior);
-				} else if (error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+				double ior = 1.5; // spec default
+				if (auto error = iorObject["ior"].get_double().get(ior); error != SUCCESS && error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
 					return Error::InvalidJson;
 				}
+				material.ior = static_cast<num>(ior);
 				break;
 			}
 			case force_consteval<crc32c(extensions::KHR_materials_iridescence)>: {
@@ -6036,19 +6032,19 @@ void fg::Exporter::writeMaterials(const Asset& asset, std::string& json) {
 			json += '}';
 		}
 
-		if (it->dispersion != 0.0f) {
+		if (it->dispersion.has_value()) {
 			if (json.back() == '}') json += ',';
-			json += R"("KHR_materials_dispersion":{"dispersion":)" + to_string_fp(it->dispersion) + '}';
+			json += R"("KHR_materials_dispersion":{"dispersion":)" + to_string_fp(*it->dispersion) + '}';
 		}
 
-		if (it->emissiveStrength != 1.0f) {
+		if (it->emissiveStrength.has_value()) {
 			if (json.back() == '}') json += ',';
-			json += R"("KHR_materials_emissive_strength":{"emissiveStrength":)" + to_string_fp(it->emissiveStrength) + '}';
+			json += R"("KHR_materials_emissive_strength":{"emissiveStrength":)" + to_string_fp(*it->emissiveStrength) + '}';
 		}
 
-		if (it->ior != 1.5f) {
+		if (it->ior.has_value()) {
 			if (json.back() == '}') json += ',';
-			json += R"("KHR_materials_ior":{"ior":)" + to_string_fp(it->ior) + '}';
+			json += R"("KHR_materials_ior":{"ior":)" + to_string_fp(*it->ior) + '}';
 		}
 
 		if (it->iridescence) {
