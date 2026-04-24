@@ -700,7 +700,7 @@ TEST_CASE("Extension KHR_physics_rigid_bodies simple", "[gltf-loader]") {
 	REQUIRE(node.physicsRigidBody->collider.has_value());
 	REQUIRE(node.physicsRigidBody->collider->geometry.shape.has_value());
 	REQUIRE(node.physicsRigidBody->collider->geometry.shape == 0);
-	REQUIRE(!node.physicsRigidBody->collider->geometry.node.has_value());
+	REQUIRE(!node.physicsRigidBody->collider->geometry.mesh.has_value());
 	REQUIRE(node.physicsRigidBody->collider->physicsMaterial == 0);
 	REQUIRE(node.physicsRigidBody->collider->collisionFilter == 0);
 
@@ -718,7 +718,7 @@ TEST_CASE("Extension KHR_physics_rigid_bodies simple", "[gltf-loader]") {
 	fastgltf::visit_exhaustive(fastgltf::visitor{
 		[](const fastgltf::GeometryTrigger& geo) {
 			REQUIRE(geo.geometry.convexHull);
-			REQUIRE(geo.geometry.node == 10);
+			REQUIRE(geo.geometry.mesh == 10);
 			REQUIRE(geo.collisionFilter.has_value());
 			REQUIRE(geo.collisionFilter == 0);
 		},
