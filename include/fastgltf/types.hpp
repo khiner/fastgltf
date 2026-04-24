@@ -1923,8 +1923,14 @@ namespace fastgltf {
 
     FASTGLTF_EXPORT struct AssetInfo {
         FASTGLTF_STD_PMR_NS::string gltfVersion;
+        FASTGLTF_STD_PMR_NS::string minVersion;
         FASTGLTF_STD_PMR_NS::string copyright;
         FASTGLTF_STD_PMR_NS::string generator;
+        // Raw JSON for the asset block's `extras` and `extensions` objects. Empty when absent.
+        // Not parsed into a typed structure — round-trips verbatim for callers that need to
+        // preserve pipeline-specific annotations on the asset (XMP, custom metadata, etc.).
+        FASTGLTF_STD_PMR_NS::string extras;
+        FASTGLTF_STD_PMR_NS::string extensions;
     };
 
     FASTGLTF_EXPORT struct Camera {
