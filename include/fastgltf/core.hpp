@@ -242,6 +242,8 @@ namespace fastgltf {
 
 		// See https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_meshopt_compression/README.md
 		KHR_meshopt_compression = 1ULL << 34,
+		// See https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Vendor/EXT_lights_image_based/README.md
+		EXT_lights_image_based = 1ULL << 35,
 	};
 	// clang-format on
 
@@ -341,6 +343,7 @@ namespace fastgltf {
 
 	// String representations of glTF 2.0 extension identifiers.
 	namespace extensions {
+        constexpr std::string_view EXT_lights_image_based = "EXT_lights_image_based";
 		constexpr std::string_view EXT_mesh_gpu_instancing = "EXT_mesh_gpu_instancing";
 		constexpr std::string_view EXT_meshopt_compression = "EXT_meshopt_compression";
 		constexpr std::string_view EXT_texture_webp = "EXT_texture_webp";
@@ -387,6 +390,7 @@ namespace fastgltf {
 	// value used for enabling/disabling the loading of it. This also represents all extensions that
 	// fastgltf supports and understands.
 	static constexpr auto extensionStrings = to_array<std::pair<std::string_view, Extensions>>({
+		{ extensions::EXT_lights_image_based,                   Extensions::EXT_lights_image_based },
 		{ extensions::EXT_mesh_gpu_instancing,                  Extensions::EXT_mesh_gpu_instancing },
 		{ extensions::EXT_meshopt_compression,                  Extensions::EXT_meshopt_compression },
 		{ extensions::EXT_texture_webp,                         Extensions::EXT_texture_webp },
@@ -864,6 +868,7 @@ namespace fastgltf {
 		Error parseExtensions(const simdjson::dom::object& extensionsObject, Asset& asset);
 		Error parseImages(simdjson::dom::array& array, Asset& asset);
 		Error parseLights(const simdjson::dom::array& array, Asset& asset);
+		Error parseImageBasedLights(const simdjson::dom::array& array, Asset& asset);
 		Error parseMaterialExtensions(simdjson::dom::object& object, Material& material);
 		Error parseMaterials(simdjson::dom::array& array, Asset& asset);
 		Error parsePrimitiveExtensions(const simdjson::dom::object& object, Primitive& primitive);
@@ -999,6 +1004,7 @@ namespace fastgltf {
 		void writeCameras(const Asset& asset, std::string& json);
 		void writeImages(const Asset& asset, std::string& json);
 		void writeLights(const Asset& asset, std::string& json);
+        void writeImageBasedLights(const Asset& asset, std::string& json);
 		void writeMaterials(const Asset& asset, std::string& json);
 		void writeMeshes(const Asset& asset, std::string& json);
 		void writeNodes(const Asset& asset, std::string& json);
