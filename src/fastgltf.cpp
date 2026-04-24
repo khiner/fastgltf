@@ -5231,11 +5231,49 @@ namespace fastgltf {
 	}
 
 	/**
+	 * Percent-encodes (RFC 3986) a URI path. Keeps unreserved characters (A-Z a-z 0-9 - . _ ~)
+	 * and '/' literal; encodes ASCII bytes that aren't URI-safe (space, '#', '?', etc.) as
+	 * %XX. UTF-8 bytes (>= 0x80) are passed through unchanged — stricter RFC 3986 requires
+	 * percent-encoding them too, but real-world glTF files commonly use raw UTF-8 in paths
+	 * (see e.g. the Khronos Unicode sample) and modern viewers accept both.
+	 */
+	static std::string percentEncodePath(std::string_view s) {
+		std::string out;
+		out.reserve(s.size());
+		constexpr char hex[] = "0123456789ABCDEF";
+		for (const unsigned char c : s) {
+			const bool unreserved = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+				(c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' || c == '~' || c == '/' ||
+				c >= 0x80;
+			if (unreserved) {
+				out.push_back(char(c));
+			} else {
+				out.push_back('%');
+				out.push_back(hex[c >> 4]);
+				out.push_back(hex[c & 0xF]);
+			}
+		}
+		return out;
+	}
+
+	/**
 	 * Normalizes the path using lexically_normal, calls generic_string to always use forward slashes,
-	 * and escapes any necessary characters.
+	 * percent-encodes URI-reserved characters, and JSON-escapes the result.
 	 */
 	static std::string normalizeAndFormatPath(const fs::path& path) {
-		auto string = path.lexically_normal().generic_string();
+		auto string = percentEncodePath(path.lexically_normal().generic_string());
+		escapeString(string);
+		return string;
+	}
+
+	/**
+	 * Emits a sources::URI uri string suitable for JSON. Data URIs (`data:...`) are passed
+	 * through unchanged (aside from JSON escaping) since their body is already in legal URI
+	 * form. Other URIs get percent-encoded so paths with spaces / non-ASCII round-trip as
+	 * spec-compliant URIs (fastgltf::URI stores the decoded form internally).
+	 */
+	static std::string formatSourceUri(std::string_view uri) {
+		auto string = uri.starts_with("data:") ? std::string(uri) : percentEncodePath(uri);
 		escapeString(string);
 		return string;
 	}
@@ -5537,7 +5575,7 @@ void fg::Exporter::writeBuffers(const Asset& asset, std::string& json) {
                 bufferPaths.emplace_back(path);
 			},
 			[&](const sources::URI& uri) {
-				json += std::string(R"("uri":")") + fg::escapeString(uri.uri.string()) + '"' + ',';
+				json += std::string(R"("uri":")") + fg::formatSourceUri(uri.uri.string()) + '"' + ',';
                 bufferPaths.emplace_back(std::nullopt);
 			},
 			[&]([[maybe_unused]] const sources::Fallback& fallback) {
@@ -5731,7 +5769,7 @@ void fg::Exporter::writeImages(const Asset& asset, std::string& json) {
 				imagePaths.emplace_back(path);
 			},
 			[&](const sources::URI& uri) {
-				json += std::string(R"("uri":")") + fg::escapeString(uri.uri.string()) + '"';
+				json += std::string(R"("uri":")") + fg::formatSourceUri(uri.uri.string()) + '"';
 				if (uri.mimeType != MimeType::None) {
 					json += std::string(R"(,"mimeType":")") + std::string(getMimeTypeString(uri.mimeType)) + '"';
 				}
