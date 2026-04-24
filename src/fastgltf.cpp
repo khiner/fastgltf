@@ -2348,6 +2348,19 @@ fg::Error fg::Parser::parseExtensions(const simdjson::dom::object& extensionsObj
                 }
                 break;
             }
+			case force_consteval<crc32c(extensions::EXT_lights_image_based)>: {
+				if (!hasBit(config.extensions, Extensions::EXT_lights_image_based))
+					break;
+
+				dom::array lightsArray;
+				if (auto error = extensionObject["lights"].get_array().get(lightsArray); error == SUCCESS) FASTGLTF_LIKELY {
+					if (auto lightsError = parseImageBasedLights(lightsArray, asset); lightsError != Error::None)
+						return lightsError;
+				} else if (error != NO_SUCH_FIELD) {
+					return Error::InvalidGltf;
+				}
+				break;
+			}
 			case force_consteval<crc32c(extensions::KHR_materials_variants)>: {
 				if (!hasBit(config.extensions, Extensions::KHR_materials_variants))
 					break;
@@ -2627,6 +2640,100 @@ fg::Error fg::Parser::parseLights(const simdjson::dom::array& lights, Asset& ass
 
         asset.lights.emplace_back(std::move(light));
     }
+
+	return Error::None;
+}
+
+fg::Error fg::Parser::parseImageBasedLights(const simdjson::dom::array& lights, Asset& asset) {
+	using namespace simdjson;
+
+	asset.imageBasedLights.reserve(lights.size());
+	for (auto lightValue : lights) {
+		dom::object lightObject;
+		if (lightValue.get_object().get(lightObject) != SUCCESS) FASTGLTF_UNLIKELY {
+			return Error::InvalidGltf;
+		}
+
+		ImageBasedLight ibl = {};
+
+		double intensity;
+		if (lightObject["intensity"].get_double().get(intensity) == SUCCESS) {
+			ibl.intensity = static_cast<num>(intensity);
+		}
+
+		dom::array rotationArray;
+		if (auto error = lightObject["rotation"].get_array().get(rotationArray); error == SUCCESS) FASTGLTF_LIKELY {
+			if (rotationArray.size() != 4) {
+				return Error::InvalidGltf;
+			}
+			for (std::size_t i = 0; i < 4; ++i) {
+				double v;
+				if (rotationArray.at(i).get_double().get(v) != SUCCESS) {
+					return Error::InvalidGltf;
+				}
+				ibl.rotation[i] = static_cast<num>(v);
+			}
+		} else if (error != NO_SUCH_FIELD) {
+			return Error::InvalidGltf;
+		}
+
+		std::uint64_t specularImageSize;
+		if (lightObject["specularImageSize"].get_uint64().get(specularImageSize) == SUCCESS) {
+			ibl.specularImageSize = static_cast<std::uint32_t>(specularImageSize);
+		}
+
+		dom::array specularImages;
+		if (lightObject["specularImages"].get_array().get(specularImages) != SUCCESS) FASTGLTF_UNLIKELY {
+			return Error::InvalidGltf;
+		}
+		ibl.specularImages.reserve(specularImages.size());
+		for (auto mipValue : specularImages) {
+			dom::array faceArray;
+			if (mipValue.get_array().get(faceArray) != SUCCESS || faceArray.size() != 6) FASTGLTF_UNLIKELY {
+				return Error::InvalidGltf;
+			}
+			std::array<std::size_t, 6> faces{};
+			for (std::size_t face = 0; face < 6; ++face) {
+				std::uint64_t imageIndex;
+				if (faceArray.at(face).get_uint64().get(imageIndex) != SUCCESS) FASTGLTF_UNLIKELY {
+					return Error::InvalidGltf;
+				}
+				faces[face] = static_cast<std::size_t>(imageIndex);
+			}
+			ibl.specularImages.emplace_back(faces);
+		}
+
+		dom::array irradianceArray;
+		if (auto error = lightObject["irradianceCoefficients"].get_array().get(irradianceArray); error == SUCCESS) FASTGLTF_LIKELY {
+			if (irradianceArray.size() != 9) {
+				return Error::InvalidGltf;
+			}
+			std::array<math::fvec3, 9> coefficients{};
+			for (std::size_t i = 0; i < 9; ++i) {
+				dom::array coeff;
+				if (irradianceArray.at(i).get_array().get(coeff) != SUCCESS || coeff.size() != 3) FASTGLTF_UNLIKELY {
+					return Error::InvalidGltf;
+				}
+				for (std::size_t c = 0; c < 3; ++c) {
+					double v;
+					if (coeff.at(c).get_double().get(v) != SUCCESS) {
+						return Error::InvalidGltf;
+					}
+					coefficients[i][c] = static_cast<num>(v);
+				}
+			}
+			ibl.irradianceCoefficients = coefficients;
+		} else if (error != NO_SUCH_FIELD) {
+			return Error::InvalidGltf;
+		}
+
+		std::string_view name;
+		if (lightObject["name"].get_string().get(name) == SUCCESS) {
+			ibl.name = FASTGLTF_CONSTRUCT_PMR_RESOURCE(decltype(ibl.name), resourceAllocator.get(), name);
+		}
+
+		asset.imageBasedLights.emplace_back(std::move(ibl));
+	}
 
 	return Error::None;
 }
@@ -3910,6 +4017,22 @@ fg::Error fg::Parser::parseScenes(const simdjson::dom::array& scenes, Asset& ass
         if (sceneObject["name"].get_string().get(name) == SUCCESS) {
 	        scene.name = FASTGLTF_CONSTRUCT_PMR_RESOURCE(decltype(scene.name), resourceAllocator.get(), name);
         }
+
+		if (hasBit(config.extensions, Extensions::EXT_lights_image_based)) {
+			dom::object sceneExtensions;
+			if (auto error = sceneObject["extensions"].get_object().get(sceneExtensions); error == SUCCESS) FASTGLTF_LIKELY {
+				dom::object iblExt;
+				if (sceneExtensions[extensions::EXT_lights_image_based].get_object().get(iblExt) == SUCCESS) FASTGLTF_LIKELY {
+					std::uint64_t lightIndex;
+					if (iblExt["light"].get_uint64().get(lightIndex) != SUCCESS) FASTGLTF_UNLIKELY {
+						return Error::InvalidGltf;
+					}
+					scene.imageBasedLightIndex = static_cast<std::size_t>(lightIndex);
+				}
+			} else if (error != NO_SUCH_FIELD) {
+				return Error::InvalidGltf;
+			}
+		}
 
 		if (config.extrasCallback != nullptr) {
 			dom::object extrasObject;
@@ -5654,6 +5777,72 @@ void fg::Exporter::writeLights(const Asset& asset, std::string& json) {
 	json += "]}";
 }
 
+void fg::Exporter::writeImageBasedLights(const Asset& asset, std::string& json) {
+	if (asset.imageBasedLights.empty())
+		return;
+	if (json.back() == ']' || json.back() == '}')
+		json += ',';
+
+	json += R"("EXT_lights_image_based":{"lights":[)";
+	for (auto it = asset.imageBasedLights.begin(); it != asset.imageBasedLights.end(); ++it) {
+		json += '{';
+
+		if (it->intensity != 1.0f) {
+			json += R"("intensity":)" + to_string_fp(it->intensity);
+		}
+
+		// Rotation, if non-identity (identity = [0, 0, 0, 1]).
+		if (!(it->rotation[0] == 0.f && it->rotation[1] == 0.f && it->rotation[2] == 0.f && it->rotation[3] == 1.f)) {
+			if (json.back() != '{') json += ',';
+			json += R"("rotation":[)"
+				+ to_string_fp(it->rotation[0]) + ',' + to_string_fp(it->rotation[1]) + ','
+				+ to_string_fp(it->rotation[2]) + ',' + to_string_fp(it->rotation[3]) + ']';
+		}
+
+		if (it->specularImageSize != 0) {
+			if (json.back() != '{') json += ',';
+			json += R"("specularImageSize":)" + std::to_string(it->specularImageSize);
+		}
+
+		if (!it->specularImages.empty()) {
+			if (json.back() != '{') json += ',';
+			json += R"("specularImages":[)";
+			for (auto mipIt = it->specularImages.begin(); mipIt != it->specularImages.end(); ++mipIt) {
+				json += '[';
+				for (std::size_t face = 0; face < 6; ++face) {
+					if (face != 0) json += ',';
+					json += std::to_string((*mipIt)[face]);
+				}
+				json += ']';
+				if (std::next(mipIt) != it->specularImages.end()) json += ',';
+			}
+			json += ']';
+		}
+
+		if (it->irradianceCoefficients.has_value()) {
+			if (json.back() != '{') json += ',';
+			json += R"("irradianceCoefficients":[)";
+			const auto& coeffs = *it->irradianceCoefficients;
+			for (std::size_t i = 0; i < 9; ++i) {
+				if (i != 0) json += ',';
+				json += '[' + to_string_fp(coeffs[i][0]) + ','
+					+ to_string_fp(coeffs[i][1]) + ','
+					+ to_string_fp(coeffs[i][2]) + ']';
+			}
+			json += ']';
+		}
+
+		if (!it->name.empty()) {
+			if (json.back() != '{') json += ',';
+			json += R"("name":")" + fg::escapeString(it->name) + '"';
+		}
+
+		json += '}';
+		if (std::next(it) != asset.imageBasedLights.end()) json += ',';
+	}
+	json += "]}";
+}
+
 void fg::Exporter::writeMaterials(const Asset& asset, std::string& json) {
 	if (asset.materials.empty())
 		return;
@@ -6427,6 +6616,11 @@ void fg::Exporter::writeScenes(const Asset& asset, std::string& json) {
 		}
 		json += ']';
 
+		if (it->imageBasedLightIndex.has_value()) {
+			json += R"(,"extensions":{"EXT_lights_image_based":{"light":)"
+				+ std::to_string(*it->imageBasedLightIndex) + "}}";
+		}
+
 		if (extrasWriteCallback != nullptr) {
 			auto extras = extrasWriteCallback(uabs(std::distance(asset.scenes.begin(), it)), fastgltf::Category::Scenes, userPointer);
 			if (extras.has_value()) {
@@ -6883,6 +7077,7 @@ void fg::Exporter::writeExtensions(const fastgltf::Asset& asset, std::string& js
     json += "\"extensions\":{";
 
     writeLights(asset, json);
+    writeImageBasedLights(asset, json);
 
 #if FASTGLTF_ENABLE_KHR_IMPLICIT_SHAPES
 	writeShapes(asset, json);

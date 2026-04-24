@@ -1970,6 +1970,12 @@ namespace fastgltf {
     FASTGLTF_EXPORT struct Scene {
 	    FASTGLTF_FG_PMR_NS::MaybeSmallVector<std::size_t> nodeIndices;
 
+		/**
+		 * Only ever has a value when EXT_lights_image_based is enabled and used by the asset.
+		 * Indexes into Asset::imageBasedLights.
+		 */
+		Optional<std::size_t> imageBasedLightIndex;
+
         FASTGLTF_STD_PMR_NS::string name;
     };
 
@@ -2790,6 +2796,25 @@ namespace fastgltf {
         FASTGLTF_STD_PMR_NS::string name;
     };
 
+	/**
+	 * A single EXT_lights_image_based light: an HDR cubemap prefiltered into specular mips with
+	 * an SH9 irradiance approximation. Specular images are stored mip-major with 6 image indices
+	 * per mip (face order +X, -X, +Y, -Y, +Z, -Z).
+	 */
+	FASTGLTF_EXPORT struct ImageBasedLight {
+		num intensity = 1.f;
+		/** Rotation applied to the cubemap (XYZW quaternion). */
+		math::fquat rotation = math::fquat(0.f, 0.f, 0.f, 1.f);
+		/** Pixel dimension of the highest-resolution specular mip. */
+		std::uint32_t specularImageSize = 0;
+		/** One entry per mip, each is 6 image indices (+X, -X, +Y, -Y, +Z, -Z). */
+		std::vector<std::array<std::size_t, 6>> specularImages;
+		/** 9 SH coefficients (L00, L1-1, L10, L11, L2-2, L2-1, L20, L21, L22). */
+		Optional<std::array<math::fvec3, 9>> irradianceCoefficients;
+
+		FASTGLTF_STD_PMR_NS::string name;
+	};
+
 	class ChunkMemoryResource;
 	FASTGLTF_EXPORT class Parser;
 
@@ -2823,6 +2848,7 @@ namespace fastgltf {
         std::vector<Node> nodes;
         std::vector<Sampler> samplers;
         std::vector<Scene> scenes;
+        std::vector<ImageBasedLight> imageBasedLights;
         std::vector<Skin> skins;
         std::vector<Texture> textures;
 
@@ -2863,6 +2889,7 @@ namespace fastgltf {
 				nodes(std::move(other.nodes)),
 				samplers(std::move(other.samplers)),
 				scenes(std::move(other.scenes)),
+				imageBasedLights(std::move(other.imageBasedLights)),
 				skins(std::move(other.skins)),
 				textures(std::move(other.textures)),
 				materialVariants(std::move(other.materialVariants)),
@@ -2894,6 +2921,7 @@ namespace fastgltf {
 			nodes = std::move(other.nodes);
 			samplers = std::move(other.samplers);
 			scenes = std::move(other.scenes);
+			imageBasedLights = std::move(other.imageBasedLights);
 			skins = std::move(other.skins);
 			textures = std::move(other.textures);
 			materialVariants = std::move(other.materialVariants);
