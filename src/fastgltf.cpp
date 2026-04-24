@@ -1497,6 +1497,19 @@ fg::Expected<fg::Asset> fg::Parser::parse(simdjson::dom::object root, Category c
 			info.generator = std::string { generator };
 		}
 
+		std::string_view minVersion;
+		if (assetInfo["minVersion"].get_string().get(minVersion) == SUCCESS) FASTGLTF_LIKELY {
+			info.minVersion = std::string { minVersion };
+		}
+
+		// Capture asset-level extras/extensions as raw JSON for verbatim round-trip.
+		if (dom::object extrasObject; assetInfo["extras"].get_object().get(extrasObject) == SUCCESS) FASTGLTF_LIKELY {
+			info.extras = simdjson::minify(extrasObject);
+		}
+		if (dom::object extensionsObject; assetInfo["extensions"].get_object().get(extensionsObject) == SUCCESS) FASTGLTF_LIKELY {
+			info.extensions = simdjson::minify(extensionsObject);
+		}
+
 		asset.assetInfo = std::move(info);
 	}
 
@@ -7272,8 +7285,14 @@ std::string fg::Exporter::writeJson(const fastgltf::Asset &asset) {
     if (asset.assetInfo.has_value()) {
         if (!asset.assetInfo->copyright.empty())
             outputString += R"("copyright":")" + fg::escapeString(asset.assetInfo->copyright) + "\",";
+        if (!asset.assetInfo->extensions.empty())
+            outputString += R"("extensions":)" + std::string(asset.assetInfo->extensions) + ',';
+        if (!asset.assetInfo->extras.empty())
+            outputString += R"("extras":)" + std::string(asset.assetInfo->extras) + ',';
         if (!asset.assetInfo->generator.empty())
             outputString += R"("generator":")" + fg::escapeString(asset.assetInfo->generator) + "\",";
+        if (!asset.assetInfo->minVersion.empty())
+            outputString += R"("minVersion":")" + fg::escapeString(asset.assetInfo->minVersion) + "\",";
         outputString += R"("version":")" + asset.assetInfo->gltfVersion + '"';
     } else {
         outputString += R"("generator":"fastgltf",)";
