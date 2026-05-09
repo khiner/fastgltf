@@ -299,6 +299,9 @@ namespace fastgltf {
 		PhysicsJoints		= 1 << 17,
 #endif
 
+		Lights				= 1 << 18, // KHR_lights_punctual
+		ImageBasedLights	= 1 << 19, // EXT_lights_image_based
+
 		All = ~0u,
 
         // Includes everything needed for rendering but animations

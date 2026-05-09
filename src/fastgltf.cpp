@@ -2653,6 +2653,15 @@ fg::Error fg::Parser::parseLights(const simdjson::dom::array& lights, Asset& ass
 	        light.name = FASTGLTF_CONSTRUCT_PMR_RESOURCE(decltype(light.name), resourceAllocator.get(), name);
         }
 
+		if (config.extrasCallback != nullptr) {
+			dom::object extrasObject;
+			if (auto extrasError = lightObject["extras"].get_object().get(extrasObject); extrasError == SUCCESS) {
+				config.extrasCallback(&extrasObject, asset.lights.size(), Category::Lights, config.userPointer);
+			} else if (extrasError != NO_SUCH_FIELD) {
+				return Error::InvalidGltf;
+			}
+		}
+
         asset.lights.emplace_back(std::move(light));
     }
 
@@ -2745,6 +2754,15 @@ fg::Error fg::Parser::parseImageBasedLights(const simdjson::dom::array& lights, 
 		std::string_view name;
 		if (lightObject["name"].get_string().get(name) == SUCCESS) {
 			ibl.name = FASTGLTF_CONSTRUCT_PMR_RESOURCE(decltype(ibl.name), resourceAllocator.get(), name);
+		}
+
+		if (config.extrasCallback != nullptr) {
+			dom::object extrasObject;
+			if (auto extrasError = lightObject["extras"].get_object().get(extrasObject); extrasError == SUCCESS) {
+				config.extrasCallback(&extrasObject, asset.imageBasedLights.size(), Category::ImageBasedLights, config.userPointer);
+			} else if (extrasError != NO_SUCH_FIELD) {
+				return Error::InvalidGltf;
+			}
 		}
 
 		asset.imageBasedLights.emplace_back(std::move(ibl));
@@ -5851,6 +5869,15 @@ void fg::Exporter::writeLights(const Asset& asset, std::string& json) {
 
 		if (!it->name.empty())
 			json += R"(,"name":")" + fg::escapeString(it->name) + '"';
+
+		if (extrasWriteCallback != nullptr) {
+			auto extras = extrasWriteCallback(uabs(std::distance(asset.lights.begin(), it)), fastgltf::Category::Lights, userPointer);
+			if (extras.has_value()) {
+				if (json.back() != '{') json += ',';
+				json += std::string("\"extras\":") + *extras;
+			}
+		}
+
 		if (json.back() == ',') json.pop_back();
 		json += '}';
 		if (uabs(std::distance(asset.lights.begin(), it)) + 1 <asset.lights.size())
@@ -5917,6 +5944,14 @@ void fg::Exporter::writeImageBasedLights(const Asset& asset, std::string& json) 
 		if (!it->name.empty()) {
 			if (json.back() != '{') json += ',';
 			json += R"("name":")" + fg::escapeString(it->name) + '"';
+		}
+
+		if (extrasWriteCallback != nullptr) {
+			auto extras = extrasWriteCallback(uabs(std::distance(asset.imageBasedLights.begin(), it)), fastgltf::Category::ImageBasedLights, userPointer);
+			if (extras.has_value()) {
+				if (json.back() != '{') json += ',';
+				json += std::string("\"extras\":") + *extras;
+			}
 		}
 
 		json += '}';
