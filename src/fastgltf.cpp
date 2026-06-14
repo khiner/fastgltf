@@ -6844,7 +6844,9 @@ void fg::Exporter::writeScenes(const Asset& asset, std::string& json) {
 		}
 
 		if (it->imageBasedLightIndex.has_value()) {
-			json += R"(,"extensions":{"EXT_lights_image_based":{"light":)"
+			if (json.back() != '{')
+				json += ',';
+			json += R"("extensions":{"EXT_lights_image_based":{"light":)"
 				+ std::to_string(*it->imageBasedLightIndex) + "}}";
 		}
 
