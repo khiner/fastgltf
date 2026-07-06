@@ -242,6 +242,11 @@ namespace fastgltf {
 
 		// See https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Vendor/EXT_lights_image_based/README.md
 		EXT_lights_image_based = 1ULL << 34,
+
+#if FASTGLTF_ENABLE_KHR_AUDIO_MODAL
+		// See https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_audio_modal
+		KHR_audio_modal = 1ULL << 35,
+#endif
     };
     // clang-format on
 
@@ -380,6 +385,10 @@ namespace fastgltf {
 #if FASTGLTF_ENABLE_KHR_PHYSICS_RIGID_BODIES
 		constexpr std::string_view KHR_physics_rigid_bodies = "KHR_physics_rigid_bodies";
 #endif
+
+#if FASTGLTF_ENABLE_KHR_AUDIO_MODAL
+		constexpr std::string_view KHR_audio_modal = "KHR_audio_modal";
+#endif
     } // namespace extensions
 
 	// clang-format off
@@ -425,6 +434,10 @@ namespace fastgltf {
 
 #if FASTGLTF_ENABLE_KHR_PHYSICS_RIGID_BODIES
 		{ extensions::KHR_physics_rigid_bodies,					Extensions::KHR_physics_rigid_bodies },
+#endif
+
+#if FASTGLTF_ENABLE_KHR_AUDIO_MODAL
+		{ extensions::KHR_audio_modal,							Extensions::KHR_audio_modal },
 #endif
 	});
 	// clang-format on
@@ -884,6 +897,12 @@ namespace fastgltf {
 
 		Error parsePhysicsRigidBody(simdjson::dom::object& khr_physics_rigid_bodies, Node& node);
 #endif
+#if FASTGLTF_ENABLE_KHR_AUDIO_MODAL
+		Error parseAudioModalModels(const simdjson::dom::array& models, Asset& asset);
+		Error parseAudioModalMaterials(const simdjson::dom::array& materials, Asset& asset);
+
+		Error parseAudioModal(simdjson::dom::object& khr_audio_modal, Node& node);
+#endif
 		Expected<Asset> parse(simdjson::dom::object root, Category categories);
 
     public:
@@ -1015,6 +1034,10 @@ namespace fastgltf {
 		void writePhysicsMaterials(const Asset& asset, std::string& json);
 		void writeCollisionFilters(const Asset& asset, std::string& json);
 		void writePhysicsJoints(const Asset& asset, std::string& json);
+#endif
+#if FASTGLTF_ENABLE_KHR_AUDIO_MODAL
+		void writeAudioModalModels(const Asset& asset, std::string& json);
+		void writeAudioModalMaterials(const Asset& asset, std::string& json);
 #endif
         void writeExtensions(const Asset& asset, std::string& json);
 

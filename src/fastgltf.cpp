@@ -2452,6 +2452,33 @@ fg::Error fg::Parser::parseExtensions(const simdjson::dom::object& extensionsObj
 				break;
 			}
 #endif
+#if FASTGLTF_ENABLE_KHR_AUDIO_MODAL
+			case force_consteval<crc32c(extensions::KHR_audio_modal)>: {
+				if (!hasBit(config.extensions, Extensions::KHR_audio_modal)) {
+					break;
+				}
+
+				dom::array materialsArray;
+				if (auto arrayError = extensionObject["materials"].get_array().get(materialsArray); arrayError == SUCCESS) {
+					if (auto materialsError = parseAudioModalMaterials(materialsArray, asset); materialsError != Error::None) FASTGLTF_UNLIKELY {
+						return materialsError;
+					}
+				} else if (arrayError != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+					return Error::InvalidGltf;
+				}
+
+				dom::array modelsArray;
+				if (auto arrayError = extensionObject["models"].get_array().get(modelsArray); arrayError == SUCCESS) {
+					if (auto modelsError = parseAudioModalModels(modelsArray, asset); modelsError != Error::None) FASTGLTF_UNLIKELY {
+						return modelsError;
+					}
+				} else if (arrayError != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+					return Error::InvalidGltf;
+				}
+
+				break;
+			}
+#endif
             default:
                 continue;
         }
@@ -3916,6 +3943,20 @@ fg::Error fg::Parser::parseNodes(simdjson::dom::array& nodes, Asset& asset) {
 			}
 #endif
 
+#if FASTGLTF_ENABLE_KHR_AUDIO_MODAL
+			if (hasBit(config.extensions, Extensions::KHR_audio_modal)) {
+				dom::object audioModalObject;
+				if (auto audioModalError = extensionsObject[extensions::KHR_audio_modal].get_object().get(audioModalObject); audioModalError == SUCCESS) FASTGLTF_LIKELY {
+					const auto modalError = parseAudioModal(audioModalObject, node);
+					if (modalError != Error::None) {
+						return modalError;
+					}
+				} else if (audioModalError != NO_SUCH_FIELD) {
+					return Error::InvalidGltf;
+				}
+			}
+#endif
+
         	if (hasBit(config.extensions, Extensions::KHR_node_visibility)) {
         		dom::object nodeVisibilityObject;
         		if (auto nodeVisibilityError = extensionsObject[extensions::KHR_node_visibility].get_object().get(nodeVisibilityObject); nodeVisibilityError == SUCCESS) {
@@ -4984,6 +5025,141 @@ fg::Error fg::Parser::parsePhysicsRigidBody(simdjson::dom::object& khr_physics_r
 			return Error::InvalidGltf;
 		}
 	    
+	} else if (error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+		return Error::InvalidGltf;
+	}
+
+	return Error::None;
+}
+#endif
+
+#if FASTGLTF_ENABLE_KHR_AUDIO_MODAL
+fg::Error fg::Parser::parseAudioModalMaterials(const simdjson::dom::array& materials, Asset& asset) {
+	using namespace simdjson;
+
+	asset.audioModalMaterials.reserve(materials.size());
+	for (auto materialValue : materials) {
+		AudioModalMaterial& material = asset.audioModalMaterials.emplace_back();
+		dom::object materialObject;
+		if (materialValue.get_object().get(materialObject) != SUCCESS) FASTGLTF_UNLIKELY {
+			return Error::InvalidGltf;
+		}
+
+		const auto readOptional = [&](std::string_view key, Optional<num>& dst) -> Error {
+			double value;
+			if (auto error = materialObject[key].get_double().get(value); error == SUCCESS) {
+				dst = static_cast<num>(value);
+			} else if (error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+				return Error::InvalidGltf;
+			}
+			return Error::None;
+		};
+		if (readOptional("density", material.density) != Error::None) return Error::InvalidGltf;
+		if (readOptional("youngsModulus", material.youngsModulus) != Error::None) return Error::InvalidGltf;
+		if (readOptional("poissonRatio", material.poissonRatio) != Error::None) return Error::InvalidGltf;
+		if (readOptional("alpha", material.alpha) != Error::None) return Error::InvalidGltf;
+		if (readOptional("beta", material.beta) != Error::None) return Error::InvalidGltf;
+
+		std::string_view name;
+		if (materialObject["name"].get_string().get(name) == SUCCESS) {
+			material.name = FASTGLTF_CONSTRUCT_PMR_RESOURCE(decltype(material.name), resourceAllocator.get(), name);
+		}
+	}
+
+	return Error::None;
+}
+
+fg::Error fg::Parser::parseAudioModalModels(const simdjson::dom::array& models, Asset& asset) {
+	using namespace simdjson;
+
+	asset.audioModalModels.reserve(models.size());
+	for (auto modelValue : models) {
+		AudioModalModel& model = asset.audioModalModels.emplace_back();
+		dom::object modelObject;
+		if (modelValue.get_object().get(modelObject) != SUCCESS) FASTGLTF_UNLIKELY {
+			return Error::InvalidGltf;
+		}
+
+		const auto readRequired = [&](std::string_view key, std::size_t& dst) -> Error {
+			std::uint64_t value;
+			if (modelObject[key].get_uint64().get(value) != SUCCESS) FASTGLTF_UNLIKELY {
+				return Error::InvalidGltf;
+			}
+			dst = static_cast<std::size_t>(value);
+			return Error::None;
+		};
+		if (readRequired("frequencies", model.frequencies) != Error::None) return Error::InvalidGltf;
+		if (readRequired("decayRates", model.decayRates) != Error::None) return Error::InvalidGltf;
+		if (readRequired("positions", model.positions) != Error::None) return Error::InvalidGltf;
+		if (readRequired("shapes", model.shapes) != Error::None) return Error::InvalidGltf;
+
+		const auto readOptional = [&](std::string_view key, Optional<std::size_t>& dst) -> Error {
+			std::uint64_t value;
+			if (auto error = modelObject[key].get_uint64().get(value); error == SUCCESS) {
+				dst = static_cast<std::size_t>(value);
+			} else if (error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+				return Error::InvalidGltf;
+			}
+			return Error::None;
+		};
+		if (readOptional("indices", model.indices) != Error::None) return Error::InvalidGltf;
+		if (readOptional("material", model.material) != Error::None) return Error::InvalidGltf;
+
+		dom::object massObject;
+		if (auto error = modelObject["massProperties"].get_object().get(massObject); error == SUCCESS) {
+			AudioModalMassProperties mass;
+			double massValue;
+			if (massObject["mass"].get_double().get(massValue) != SUCCESS) FASTGLTF_UNLIKELY {
+				return Error::InvalidGltf;
+			}
+			mass.mass = static_cast<num>(massValue);
+
+			const auto readVector = [&](std::string_view key, auto& dst, std::size_t count) -> Error {
+				dom::array array;
+				if (auto e = massObject[key].get_array().get(array); e == SUCCESS) {
+					if (array.size() != count) FASTGLTF_UNLIKELY { return Error::InvalidGltf; }
+					auto i = 0U;
+					for (auto numValue : array) {
+						double val;
+						if (numValue.get_double().get(val) != SUCCESS) FASTGLTF_UNLIKELY { return Error::InvalidGltf; }
+						dst[i++] = static_cast<num>(val);
+					}
+				} else if (e != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+					return Error::InvalidGltf;
+				}
+				return Error::None;
+			};
+			if (readVector("centerOfMass", mass.centerOfMass, 3) != Error::None) return Error::InvalidGltf;
+			if (readVector("inertiaDiagonal", mass.inertiaDiagonal, 3) != Error::None) return Error::InvalidGltf;
+			if (readVector("inertiaOrientation", mass.inertiaOrientation, 4) != Error::None) return Error::InvalidGltf;
+			model.massProperties = mass;
+		} else if (error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+			return Error::InvalidGltf;
+		}
+
+		std::string_view name;
+		if (modelObject["name"].get_string().get(name) == SUCCESS) {
+			model.name = FASTGLTF_CONSTRUCT_PMR_RESOURCE(decltype(model.name), resourceAllocator.get(), name);
+		}
+	}
+
+	return Error::None;
+}
+
+fg::Error fg::Parser::parseAudioModal(simdjson::dom::object& khr_audio_modal, Node& node) {
+	using namespace simdjson;
+
+	auto& audioModal = node.audioModal.emplace();
+
+	std::uint64_t model;
+	if (khr_audio_modal["model"].get_uint64().get(model) != SUCCESS) FASTGLTF_UNLIKELY {
+		return Error::InvalidGltf;
+	}
+	audioModal.model = static_cast<std::size_t>(model);
+
+	double gain;
+	if (auto error = khr_audio_modal["gain"].get_double().get(gain); error == SUCCESS) {
+		audioModal.gain = static_cast<num>(gain);
 	} else if (error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
 		return Error::InvalidGltf;
 	}
@@ -6570,6 +6746,9 @@ void fg::Exporter::writeNodes(const Asset& asset, std::string& json) {
 #if FASTGLTF_ENABLE_KHR_PHYSICS_RIGID_BODIES
 			|| it->physicsRigidBody
 #endif
+#if FASTGLTF_ENABLE_KHR_AUDIO_MODAL
+			|| it->audioModal.has_value()
+#endif
 			|| !it->visible || !it->selectable || !it->hoverable
 			) {
 			if (json.back() != '{') json += ',';
@@ -6690,6 +6869,18 @@ void fg::Exporter::writeNodes(const Asset& asset, std::string& json) {
 					json += '}';
 				}
 
+				json += '}';
+			}
+#endif
+
+#if FASTGLTF_ENABLE_KHR_AUDIO_MODAL
+			if (it->audioModal.has_value()) {
+				if (json.back() != '{') json += ',';
+				const auto& audioModal = *it->audioModal;
+				json += R"("KHR_audio_modal":{"model":)" + std::to_string(audioModal.model);
+				if (audioModal.gain != num(1)) {
+					json += R"(,"gain":)" + to_string_fp(audioModal.gain);
+				}
 				json += '}';
 			}
 #endif
@@ -7271,6 +7462,84 @@ void fg::Exporter::writePhysicsJoints(const Asset& asset, std::string& json) {
 }
 #endif
 
+#if FASTGLTF_ENABLE_KHR_AUDIO_MODAL
+void fg::Exporter::writeAudioModalMaterials(const Asset& asset, std::string& json) {
+	if (asset.audioModalMaterials.empty()) {
+		return;
+	}
+	if (json.back() == ']' || json.back() == '}') {
+		json += ',';
+	}
+
+	json += R"("materials":[)";
+	for (auto it = asset.audioModalMaterials.begin(); it != asset.audioModalMaterials.end(); ++it) {
+		const auto& material = *it;
+		json += '{';
+		const auto writeOptional = [&](std::string_view key, const Optional<num>& value) {
+			if (!value.has_value()) return;
+			if (json.back() != '{') json += ',';
+			json += '"';
+			json += key;
+			json += "\":" + to_string_fp(*value);
+		};
+		writeOptional("density", material.density);
+		writeOptional("youngsModulus", material.youngsModulus);
+		writeOptional("poissonRatio", material.poissonRatio);
+		writeOptional("alpha", material.alpha);
+		writeOptional("beta", material.beta);
+		if (!material.name.empty()) {
+			if (json.back() != '{') json += ',';
+			json += R"("name":")" + fg::escapeString(material.name) + '"';
+		}
+		json += '}';
+		if (uabs(std::distance(asset.audioModalMaterials.begin(), it)) + 1 < asset.audioModalMaterials.size()) {
+			json += ',';
+		}
+	}
+	json += ']';
+}
+
+void fg::Exporter::writeAudioModalModels(const Asset& asset, std::string& json) {
+	if (asset.audioModalModels.empty()) {
+		return;
+	}
+	if (json.back() == ']' || json.back() == '}') {
+		json += ',';
+	}
+
+	json += R"("models":[)";
+	for (auto it = asset.audioModalModels.begin(); it != asset.audioModalModels.end(); ++it) {
+		const auto& model = *it;
+		json += R"({"frequencies":)" + std::to_string(model.frequencies)
+			+ R"(,"decayRates":)" + std::to_string(model.decayRates)
+			+ R"(,"positions":)" + std::to_string(model.positions)
+			+ R"(,"shapes":)" + std::to_string(model.shapes);
+		if (model.indices.has_value()) {
+			json += R"(,"indices":)" + std::to_string(*model.indices);
+		}
+		if (model.material.has_value()) {
+			json += R"(,"material":)" + std::to_string(*model.material);
+		}
+		if (model.massProperties.has_value()) {
+			const auto& mp = *model.massProperties;
+			json += R"(,"massProperties":{"mass":)" + to_string_fp(mp.mass)
+				+ R"(,"centerOfMass":[)" + to_string_fp(mp.centerOfMass[0]) + ',' + to_string_fp(mp.centerOfMass[1]) + ',' + to_string_fp(mp.centerOfMass[2]) + ']'
+				+ R"(,"inertiaDiagonal":[)" + to_string_fp(mp.inertiaDiagonal[0]) + ',' + to_string_fp(mp.inertiaDiagonal[1]) + ',' + to_string_fp(mp.inertiaDiagonal[2]) + ']'
+				+ R"(,"inertiaOrientation":[)" + to_string_fp(mp.inertiaOrientation[0]) + ',' + to_string_fp(mp.inertiaOrientation[1]) + ',' + to_string_fp(mp.inertiaOrientation[2]) + ',' + to_string_fp(mp.inertiaOrientation[3]) + ']'
+				+ '}';
+		}
+		if (!model.name.empty()) {
+			json += R"(,"name":")" + fg::escapeString(model.name) + '"';
+		}
+		json += '}';
+		if (uabs(std::distance(asset.audioModalModels.begin(), it)) + 1 < asset.audioModalModels.size()) {
+			json += ',';
+		}
+	}
+	json += ']';
+}
+#endif
+
 void fg::Exporter::writeExtensions(const fastgltf::Asset& asset, std::string& json) {
 	if (json.back() == ']' || json.back() == '}')
 		json += ',';
@@ -7294,6 +7563,18 @@ void fg::Exporter::writeExtensions(const fastgltf::Asset& asset, std::string& js
         writePhysicsJoints(asset, json);
         json += '}';
     }
+#endif
+
+#if FASTGLTF_ENABLE_KHR_AUDIO_MODAL
+	if (!asset.audioModalModels.empty()) {
+		if (json.back() == ']' || json.back() == '}') {
+			json += ',';
+		}
+		json += R"("KHR_audio_modal":{)";
+		writeAudioModalMaterials(asset, json);
+		writeAudioModalModels(asset, json);
+		json += '}';
+	}
 #endif
 
 	if (!asset.materialVariants.empty()) {
