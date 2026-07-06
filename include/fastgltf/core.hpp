@@ -244,6 +244,11 @@ namespace fastgltf {
 		KHR_meshopt_compression = 1ULL << 34,
 		// See https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Vendor/EXT_lights_image_based/README.md
 		EXT_lights_image_based = 1ULL << 35,
+
+#if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
+		// See https://github.com/khiner/MeshEditor/tree/main/glTF_PhysicalAudio/extensions/2.0/Khronos/KHR_audio_rigid_bodies
+		KHR_audio_rigid_bodies = 1ULL << 36,
+#endif
 	};
 	// clang-format on
 
@@ -383,6 +388,10 @@ namespace fastgltf {
 #if FASTGLTF_ENABLE_KHR_PHYSICS_RIGID_BODIES
 		constexpr std::string_view KHR_physics_rigid_bodies = "KHR_physics_rigid_bodies";
 #endif
+
+#if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
+		constexpr std::string_view KHR_audio_rigid_bodies = "KHR_audio_rigid_bodies";
+#endif
 	} // namespace extensions
 
 	// clang-format off
@@ -429,6 +438,10 @@ namespace fastgltf {
 
 #if FASTGLTF_ENABLE_KHR_PHYSICS_RIGID_BODIES
 		{ extensions::KHR_physics_rigid_bodies,					Extensions::KHR_physics_rigid_bodies },
+#endif
+
+#if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
+		{ extensions::KHR_audio_rigid_bodies,							Extensions::KHR_audio_rigid_bodies },
 #endif
 	});
 	// clang-format on
@@ -888,6 +901,12 @@ namespace fastgltf {
 
 		Error parsePhysicsRigidBody(simdjson::dom::object& khr_physics_rigid_bodies, Node& node);
 #endif
+#if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
+		Error parseModalModels(const simdjson::dom::array& models, Asset& asset);
+		Error parseAcousticMaterials(const simdjson::dom::array& materials, Asset& asset);
+
+		Error parseAudioRigidBody(simdjson::dom::object& khr_audio_rigid_bodies, Node& node);
+#endif
 		Expected<Asset> parse(simdjson::dom::object root, Category categories);
 
 	public:
@@ -1019,6 +1038,10 @@ namespace fastgltf {
 		void writePhysicsMaterials(const Asset& asset, std::string& json);
 		void writeCollisionFilters(const Asset& asset, std::string& json);
 		void writePhysicsJoints(const Asset& asset, std::string& json);
+#endif
+#if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
+		void writeModalModels(const Asset& asset, std::string& json);
+		void writeAcousticMaterials(const Asset& asset, std::string& json);
 #endif
 		void writeExtensions(const Asset& asset, std::string& json);
 

@@ -2274,6 +2274,57 @@ namespace fastgltf {
 	};
 #endif
 
+#if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
+	/**
+	 * The bulk physical parameters of a solid (KHR_audio_rigid_bodies acoustic material).
+	 * All fields are optional.
+	 */
+	FASTGLTF_EXPORT struct AcousticMaterial {
+		Optional<num> density;
+		Optional<num> youngsModulus;
+		Optional<num> poissonRatio;
+		Optional<num> alpha;
+		Optional<num> beta;
+		FASTGLTF_STD_PMR_NS::string name;
+	};
+
+	/**
+	 * A precomputed modal sound model (KHR_audio_rigid_bodies). The members are accessor indices for per-mode
+	 * frequencies, decay rates, sample point positions, and mode-major mode shapes.
+	 */
+	/**
+	 * Rigid-body mass properties of a modal model's object (KHR_audio_rigid_bodies massProperties). Mirrors
+	 * KHR_physics_rigid_bodies' motion so values are interchangeable.
+	 */
+	FASTGLTF_EXPORT struct ModalMassProperties {
+		num mass = 0;
+		math::fvec3 centerOfMass = { 0, 0, 0 };
+		math::fvec3 inertiaDiagonal = { 0, 0, 0 };
+		math::fvec4 inertiaOrientation = { 0, 0, 0, 1 };
+	};
+
+	FASTGLTF_EXPORT struct ModalModel {
+		std::size_t frequencies;
+		std::size_t decayRates;
+		std::size_t positions;
+		std::size_t shapes;
+		Optional<std::size_t> indices;
+		Optional<std::size_t> material;
+		Optional<ModalMassProperties> massProperties;
+		FASTGLTF_STD_PMR_NS::string name;
+	};
+
+	/**
+	 * Makes a node's rigid body participate in physically based contact sound
+	 * (KHR_audio_rigid_bodies node extension). Every reference is optional, so a body may sound,
+	 * supply only a contact surface, or both.
+	 */
+	FASTGLTF_EXPORT struct AudioRigidBody {
+		Optional<std::size_t> modalModel;
+		num gain = 1.f;
+	};
+#endif
+
 	FASTGLTF_EXPORT struct Node {
 		Optional<std::size_t> meshIndex;
 		Optional<std::size_t> skinIndex;
@@ -2303,6 +2354,10 @@ namespace fastgltf {
 
 #if FASTGLTF_ENABLE_KHR_PHYSICS_RIGID_BODIES
 		std::unique_ptr<PhysicsRigidBody> physicsRigidBody;
+#endif
+
+#if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
+		Optional<AudioRigidBody> audioRigidBody;
 #endif
 
 		bool visible = true;
@@ -2891,6 +2946,11 @@ namespace fastgltf {
 		std::vector<CollisionFilter> collisionFilters;
 #endif
 
+#if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
+		std::vector<ModalModel> modalModels;
+		std::vector<AcousticMaterial> acousticMaterials;
+#endif
+
 		// Keeps tracked of categories that were actually parsed.
 		Category availableCategories = Category::None;
 
@@ -2928,6 +2988,10 @@ namespace fastgltf {
 				physicsJoints(std::move(other.physicsJoints)),
 				collisionFilters(std::move(other.collisionFilters)),
 #endif
+#if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
+			    modalModels(std::move(other.modalModels)),
+			    acousticMaterials(std::move(other.acousticMaterials)),
+#endif
 				availableCategories(other.availableCategories) {}
 
 		Asset& operator=(const Asset& other) = delete;
@@ -2959,6 +3023,10 @@ namespace fastgltf {
 			physicsMaterials = std::move(other.physicsMaterials);
 			physicsJoints = std::move(other.physicsJoints);
 			collisionFilters = std::move(other.collisionFilters);
+#endif
+#if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
+			modalModels = std::move(other.modalModels);
+			acousticMaterials = std::move(other.acousticMaterials);
 #endif
 			availableCategories = other.availableCategories;
 #if !FASTGLTF_DISABLE_CUSTOM_MEMORY_POOL
