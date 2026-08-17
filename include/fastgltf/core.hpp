@@ -904,6 +904,7 @@ namespace fastgltf {
 #if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
 		Error parseModalModels(const simdjson::dom::array& models, Asset& asset);
 		Error parseAcousticMaterials(const simdjson::dom::array& materials, Asset& asset);
+		Error parseAcousticSurfaces(const simdjson::dom::array& surfaces, Asset& asset);
 
 		Error parseAudioRigidBody(simdjson::dom::object& khr_audio_rigid_bodies, Node& node);
 #endif
@@ -1042,6 +1043,7 @@ namespace fastgltf {
 #if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
 		void writeModalModels(const Asset& asset, std::string& json);
 		void writeAcousticMaterials(const Asset& asset, std::string& json);
+		void writeAcousticSurfaces(const Asset& asset, std::string& json);
 #endif
 		void writeExtensions(const Asset& asset, std::string& json);
 

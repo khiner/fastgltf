@@ -2321,6 +2321,7 @@ namespace fastgltf {
 	 */
 	FASTGLTF_EXPORT struct AudioRigidBody {
 		Optional<std::size_t> modalModel;
+		Optional<std::size_t> acousticSurface;
 		num gain = 1.f;
 	};
 #endif
@@ -2506,6 +2507,27 @@ namespace fastgltf {
 	FASTGLTF_EXPORT struct OcclusionTextureInfo : TextureInfo {
 		num strength = 1.f;
 	};
+
+#if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
+	/**
+	 * The finish of a body's surface below the scale of its collision geometry (KHR_audio_rigid_bodies
+	 * acoustic surface), which is what two bodies in sustained contact ride over. Defined here rather
+	 * than beside the extension's other types so it can carry a normalTextureInfo. All fields are optional.
+	 */
+	FASTGLTF_EXPORT struct AcousticSurface {
+		Optional<num> roughness;
+		Optional<num> correlationLength;
+		Optional<num> waviness;
+		Optional<num> wavinessLength;
+		Optional<num> spectralSlope;
+		Optional<num> shortWavelength;
+		Optional<std::size_t> profile;
+		Optional<num> sampleSpacing;
+		Optional<NormalTextureInfo> normalTexture;
+		Optional<std::size_t> material;
+		FASTGLTF_STD_PMR_NS::string name;
+	};
+#endif
 
 	FASTGLTF_EXPORT struct PBRData {
 		/**
@@ -2949,6 +2971,7 @@ namespace fastgltf {
 #if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
 		std::vector<ModalModel> modalModels;
 		std::vector<AcousticMaterial> acousticMaterials;
+		std::vector<AcousticSurface> acousticSurfaces;
 #endif
 
 		// Keeps tracked of categories that were actually parsed.
@@ -2991,6 +3014,7 @@ namespace fastgltf {
 #if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
 			    modalModels(std::move(other.modalModels)),
 			    acousticMaterials(std::move(other.acousticMaterials)),
+			    acousticSurfaces(std::move(other.acousticSurfaces)),
 #endif
 				availableCategories(other.availableCategories) {}
 
@@ -3027,6 +3051,7 @@ namespace fastgltf {
 #if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
 			modalModels = std::move(other.modalModels);
 			acousticMaterials = std::move(other.acousticMaterials);
+			acousticSurfaces = std::move(other.acousticSurfaces);
 #endif
 			availableCategories = other.availableCategories;
 #if !FASTGLTF_DISABLE_CUSTOM_MEMORY_POOL

@@ -2502,6 +2502,15 @@ fg::Error fg::Parser::parseExtensions(const simdjson::dom::object& extensionsObj
 					return Error::InvalidGltf;
 				}
 
+				dom::array surfacesArray;
+				if (auto arrayError = extensionObject["acousticSurfaces"].get_array().get(surfacesArray); arrayError == SUCCESS) {
+					if (auto surfacesError = parseAcousticSurfaces(surfacesArray, asset); surfacesError != Error::None) FASTGLTF_UNLIKELY {
+						return surfacesError;
+					}
+				} else if (arrayError != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+					return Error::InvalidGltf;
+				}
+
 				dom::array modelsArray;
 				if (auto arrayError = extensionObject["modalModels"].get_array().get(modelsArray); arrayError == SUCCESS) {
 					if (auto modelsError = parseModalModels(modelsArray, asset); modelsError != Error::None) FASTGLTF_UNLIKELY {
@@ -5104,6 +5113,62 @@ fg::Error fg::Parser::parseAcousticMaterials(const simdjson::dom::array& materia
 	return Error::None;
 }
 
+fg::Error fg::Parser::parseAcousticSurfaces(const simdjson::dom::array& surfaces, Asset& asset) {
+	using namespace simdjson;
+
+	asset.acousticSurfaces.reserve(surfaces.size());
+	for (auto surfaceValue : surfaces) {
+		AcousticSurface& surface = asset.acousticSurfaces.emplace_back();
+		dom::object surfaceObject;
+		if (surfaceValue.get_object().get(surfaceObject) != SUCCESS) FASTGLTF_UNLIKELY {
+			return Error::InvalidGltf;
+		}
+
+		const auto readNumber = [&](std::string_view key, Optional<num>& dst) -> Error {
+			double value;
+			if (auto error = surfaceObject[key].get_double().get(value); error == SUCCESS) {
+				dst = static_cast<num>(value);
+			} else if (error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+				return Error::InvalidGltf;
+			}
+			return Error::None;
+		};
+		if (readNumber("roughness", surface.roughness) != Error::None) return Error::InvalidGltf;
+		if (readNumber("correlationLength", surface.correlationLength) != Error::None) return Error::InvalidGltf;
+		if (readNumber("waviness", surface.waviness) != Error::None) return Error::InvalidGltf;
+		if (readNumber("wavinessLength", surface.wavinessLength) != Error::None) return Error::InvalidGltf;
+		if (readNumber("spectralSlope", surface.spectralSlope) != Error::None) return Error::InvalidGltf;
+		if (readNumber("shortWavelength", surface.shortWavelength) != Error::None) return Error::InvalidGltf;
+		if (readNumber("sampleSpacing", surface.sampleSpacing) != Error::None) return Error::InvalidGltf;
+
+		const auto readIndex = [&](std::string_view key, Optional<std::size_t>& dst) -> Error {
+			std::uint64_t value;
+			if (auto error = surfaceObject[key].get_uint64().get(value); error == SUCCESS) {
+				dst = static_cast<std::size_t>(value);
+			} else if (error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+				return Error::InvalidGltf;
+			}
+			return Error::None;
+		};
+		if (readIndex("profile", surface.profile) != Error::None) return Error::InvalidGltf;
+		if (readIndex("material", surface.material) != Error::None) return Error::InvalidGltf;
+
+		NormalTextureInfo normalTexture = {};
+		if (auto error = parseTextureInfo(surfaceObject, "normalTexture", &normalTexture, config.extensions, TextureInfoType::NormalTexture); error == Error::None) {
+			surface.normalTexture = std::move(normalTexture);
+		} else if (error != Error::MissingField) FASTGLTF_UNLIKELY {
+			return error;
+		}
+
+		std::string_view name;
+		if (surfaceObject["name"].get_string().get(name) == SUCCESS) {
+			surface.name = FASTGLTF_CONSTRUCT_PMR_RESOURCE(decltype(surface.name), resourceAllocator.get(), name);
+		}
+	}
+
+	return Error::None;
+}
+
 fg::Error fg::Parser::parseModalModels(const simdjson::dom::array& models, Asset& asset) {
 	using namespace simdjson;
 
@@ -5189,6 +5254,13 @@ fg::Error fg::Parser::parseAudioRigidBody(simdjson::dom::object& khr_audio_rigid
 	std::uint64_t modalModel;
 	if (auto error = khr_audio_rigid_bodies["modalModel"].get_uint64().get(modalModel); error == SUCCESS) {
 		audioRigidBody.modalModel = static_cast<std::size_t>(modalModel);
+	} else if (error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
+		return Error::InvalidGltf;
+	}
+
+	std::uint64_t acousticSurface;
+	if (auto error = khr_audio_rigid_bodies["acousticSurface"].get_uint64().get(acousticSurface); error == SUCCESS) {
+		audioRigidBody.acousticSurface = static_cast<std::size_t>(acousticSurface);
 	} else if (error != NO_SUCH_FIELD) FASTGLTF_UNLIKELY {
 		return Error::InvalidGltf;
 	}
@@ -6919,6 +6991,10 @@ void fg::Exporter::writeNodes(const Asset& asset, std::string& json) {
 				if (audioRigidBody.modalModel.has_value()) {
 					json += R"("modalModel":)" + std::to_string(*audioRigidBody.modalModel);
 				}
+				if (audioRigidBody.acousticSurface.has_value()) {
+					if (json.back() != '{') json += ',';
+					json += R"("acousticSurface":)" + std::to_string(*audioRigidBody.acousticSurface);
+				}
 				if (audioRigidBody.gain != num(1)) {
 					if (json.back() != '{') json += ',';
 					json += R"("gain":)" + to_string_fp(audioRigidBody.gain);
@@ -7545,6 +7621,61 @@ void fg::Exporter::writeAcousticMaterials(const Asset& asset, std::string& json)
 	json += ']';
 }
 
+void fg::Exporter::writeAcousticSurfaces(const Asset& asset, std::string& json) {
+	if (asset.acousticSurfaces.empty()) {
+		return;
+	}
+	if (json.back() == ']' || json.back() == '}') {
+		json += ',';
+	}
+
+	json += R"("acousticSurfaces":[)";
+	for (auto it = asset.acousticSurfaces.begin(); it != asset.acousticSurfaces.end(); ++it) {
+		const auto& surface = *it;
+		json += '{';
+		const auto separate = [&]() {
+			if (json.back() != '{') json += ',';
+		};
+		const auto writeNumber = [&](std::string_view key, const Optional<num>& value) {
+			if (!value.has_value()) return;
+			separate();
+			json += '"';
+			json += key;
+			json += "\":" + to_string_fp(*value);
+		};
+		const auto writeIndex = [&](std::string_view key, const Optional<std::size_t>& value) {
+			if (!value.has_value()) return;
+			separate();
+			json += '"';
+			json += key;
+			json += "\":" + std::to_string(*value);
+		};
+		writeNumber("roughness", surface.roughness);
+		writeNumber("correlationLength", surface.correlationLength);
+		writeNumber("waviness", surface.waviness);
+		writeNumber("wavinessLength", surface.wavinessLength);
+		writeNumber("spectralSlope", surface.spectralSlope);
+		writeNumber("shortWavelength", surface.shortWavelength);
+		writeIndex("profile", surface.profile);
+		writeNumber("sampleSpacing", surface.sampleSpacing);
+		if (surface.normalTexture.has_value()) {
+			separate();
+			json += R"("normalTexture":)";
+			writeTextureInfo(json, &surface.normalTexture.value(), TextureInfoType::NormalTexture);
+		}
+		writeIndex("material", surface.material);
+		if (!surface.name.empty()) {
+			separate();
+			json += R"("name":")" + fg::escapeString(surface.name) + '"';
+		}
+		json += '}';
+		if (uabs(std::distance(asset.acousticSurfaces.begin(), it)) + 1 < asset.acousticSurfaces.size()) {
+			json += ',';
+		}
+	}
+	json += ']';
+}
+
 void fg::Exporter::writeModalModels(const Asset& asset, std::string& json) {
 	if (asset.modalModels.empty()) {
 		return;
@@ -7612,12 +7743,13 @@ void fg::Exporter::writeExtensions(const fastgltf::Asset& asset, std::string& js
 #endif
 
 #if FASTGLTF_ENABLE_KHR_AUDIO_RIGID_BODIES
-	if (!asset.modalModels.empty()) {
+	if (!asset.modalModels.empty() || !asset.acousticSurfaces.empty()) {
 		if (json.back() == ']' || json.back() == '}') {
 			json += ',';
 		}
 		json += R"("KHR_audio_rigid_bodies":{)";
 		writeAcousticMaterials(asset, json);
+		writeAcousticSurfaces(asset, json);
 		writeModalModels(asset, json);
 		json += '}';
 	}
