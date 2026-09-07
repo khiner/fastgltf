@@ -3954,7 +3954,7 @@ fg::Error fg::Parser::parseNodes(simdjson::dom::array& nodes, Asset& asset) {
 			if (hasBit(config.extensions, Extensions::KHR_node_visibility)) {
 				dom::object nodeVisibilityObject;
 				if (auto nodeVisibilityError = extensionsObject[extensions::KHR_node_visibility].get_object().get(nodeVisibilityObject); nodeVisibilityError == SUCCESS) {
-					if (nodeVisibilityObject["visible"].get_bool().get(node.visible) != SUCCESS) {
+					if (auto error = nodeVisibilityObject["visible"].get_bool().get(node.visible); error != SUCCESS && error != NO_SUCH_FIELD) {
 						return Error::InvalidGltf;
 					}
 				} else if (nodeVisibilityError != NO_SUCH_FIELD) {

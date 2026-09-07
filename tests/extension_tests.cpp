@@ -858,6 +858,27 @@ TEST_CASE("Extension KHR_node_visibility", "[gltf-loader]") {
 	REQUIRE(!asset->nodes[2].visible);
 }
 
+TEST_CASE("Extension KHR_node_visibility defaults and types", "[gltf-loader]") {
+	for (const auto value : {"", "\"visible\":true", "\"visible\":false", "\"visible\":null", "\"visible\":0", "\"visible\":\"true\""}) {
+		CAPTURE(value);
+		const auto json = std::string(R"({"asset":{"version":"2.0"},"extensionsUsed":["KHR_node_visibility"],"nodes":[{"extensions":{"KHR_node_visibility":{)")
+			+ value + "}}}]}";
+		auto jsonData = fastgltf::GltfDataBuffer::FromBytes(
+			reinterpret_cast<const std::byte*>(json.data()), json.size());
+		REQUIRE(jsonData.error() == fastgltf::Error::None);
+		fastgltf::Parser parser(fastgltf::Extensions::KHR_node_visibility);
+		auto asset = parser.loadGltfJson(jsonData.get(), {});
+		const std::string_view field(value);
+		if (field.empty() || field == "\"visible\":true" || field == "\"visible\":false") {
+			REQUIRE(asset.error() == fastgltf::Error::None);
+			REQUIRE(asset->nodes.size() == 1);
+			REQUIRE(asset->nodes[0].visible == (field != "\"visible\":false"));
+		} else {
+			REQUIRE(asset.error() == fastgltf::Error::InvalidGltf);
+		}
+	}
+}
+
 TEST_CASE("Extension KHR_node_selectability", "[gltf-loader]") {
 	fastgltf::Parser parser(fastgltf::Extensions::KHR_node_selectability);
 	auto khrNodeSelectabilityValid = path / "khr_node_selectability_valid.gltf";
